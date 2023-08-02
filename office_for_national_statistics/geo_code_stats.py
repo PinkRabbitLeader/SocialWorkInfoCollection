@@ -88,8 +88,8 @@ def get_all_code(year: int, save_path: str = None):
                 max_code = max([int(x) for x in result["data"].keys()])
             else:
                 result = {
-                    "title": "全国统计用区划代码和城乡划分代码（国家统计局2009年度）",
-                    "year": 2009,
+                    "title": f"全国统计用区划代码和城乡划分代码（国家统计局{year}年度）",
+                    "year": year,
                     "data": {},
                 }
                 max_code = 0
@@ -163,3 +163,6 @@ def get_all_code(year: int, save_path: str = None):
         with open(file, mode='w', encoding="utf-8") as f:
             f.write(json.dumps(result, ensure_ascii=False))
             f.close()
+
+
+get_all_code(2010)
