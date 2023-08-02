@@ -109,12 +109,15 @@ def get_all_code(year: int, save_path: str = None):
         for province_i, (province, province_v) in enumerate(provinces.items()):
             if result.get("data", None):
                 max_province_code = int(str(max_code)[0:2] + "0000000000")
-                if int(province_v["code"]) < max_province_code:
+                if province_v["code"] and int(province_v["code"]) < max_province_code:
                     continue
+
             if not province_v["next_level_url"]:
-                result["data"].update({province_v['code']: province})
+                if not province_v["code"]:
+                    continue
+                result["data"].update({province_v["code"]: province})
                 continue
-            result["data"].update({province_v['code']: province})
+            result["data"].update({province_v["code"]: province})
             cities = get_page_element(url=province_v["next_level_url"])
             for city, city_v in cities.items():
                 if result.get("data", None):
@@ -155,7 +158,7 @@ def get_all_code(year: int, save_path: str = None):
 
         print("区划代码获取完成！")
     except Exception as err:
-        print(f"程序异常，错误信息为:{err}")
+        raise Exception(f"程序异常，错误信息为:{err}")
     finally:
         with open(file, mode='w', encoding="utf-8") as f:
             f.write(json.dumps(result, ensure_ascii=False))
