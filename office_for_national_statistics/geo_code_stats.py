@@ -91,26 +91,34 @@ def get_all_code(year: int, save_path: str = None):
         try:
             for province_i, (province, province_v) in enumerate(provinces.items()):
                 if not province_v["next_level_url"]:
+                    f.write(f"\t\t\"{province_v['code']}\": \"{province}\",\n")
                     continue
                 f.write(f"\t\t\"{province_v['code']}\": \"{province}\",\n")
                 cities = get_page_element(url=province_v["next_level_url"])
                 for city, city_v in cities.items():
                     if not city_v["next_level_url"]:
+                        f.write(f"\t\t\"{city_v['code']}\": \"{city}\",\n")
                         continue
                     f.write(f"\t\t\"{city_v['code']}\": \"{city}\",\n")
                     counties = get_page_element(url=city_v["next_level_url"])
                     for county, county_v in counties.items():
                         if not county_v["next_level_url"]:
+                            f.write(f"\t\t\"{county_v['code']}\": \"{county}\",\n")
                             continue
                         f.write(f"\t\t\"{county_v['code']}\": \"{county}\",\n")
                         towns = get_page_element(url=county_v["next_level_url"])
                         for town, town_v in tqdm(towns.items(), desc=f"{province}-{city}-{county}"):
                             if not town_v["next_level_url"]:
+                                f.write(f"\t\t\"{town_v['code']}\": \"{town}\",\n")
                                 continue
                             f.write(f"\t\t\"{town_v['code']}\": \"{town}\",\n")
                             villages = get_page_element(url=town_v["next_level_url"])
                             for village_i, (village, village_v) in enumerate(villages.items()):
                                 if not village_v["next_level_url"]:
+                                    if province_i == len(provinces) - 1 and village_i == len(villages) - 1:
+                                        f.write(f"\t\t\"{village_v['code']}\": \"{village}\"\n")
+                                    else:
+                                        f.write(f"\t\t\"{village_v['code']}\": \"{village}\",\n")
                                     continue
                                 if province_i == len(provinces) - 1 and village_i == len(villages) - 1:
                                     f.write(f"\t\t\"{village_v['code']}\": \"{village}\"\n")
@@ -123,4 +131,3 @@ def get_all_code(year: int, save_path: str = None):
             f.close()
 
     print("区划代码获取完成！")
-
