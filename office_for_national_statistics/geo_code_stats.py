@@ -12,14 +12,6 @@ from retrying import retry
 from utils.web_scraping_tools import user_agent_list
 
 
-def req_error(exception):
-    if isinstance(exception, ConnectionError):
-        print("获取数据失败，正在重新尝试，共10次...")
-    else:
-        raise Exception(f"获取数据失败，原错误为：{str(exception)}")
-    return isinstance(exception, ConnectionError)
-
-
 @retry(stop_max_attempt_number=10, wait_random_min=2000, wait_random_max=10000)
 def get_page_element(url: str) -> dict:
     """获取省份用于跳转的URL
@@ -163,6 +155,3 @@ def get_all_code(year: int, save_path: str = None):
         with open(file, mode='w', encoding="utf-8") as f:
             f.write(json.dumps(result, ensure_ascii=False))
             f.close()
-
-
-get_all_code(2010)
