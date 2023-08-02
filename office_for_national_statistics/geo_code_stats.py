@@ -3,7 +3,6 @@ __all__ = ["get_page_element", "get_all_code"]
 import json
 import random
 import os
-import re
 import requests
 from tqdm import tqdm
 from pathlib import Path
@@ -73,9 +72,8 @@ def get_all_code(year: int, save_path: str = None):
     file = str(Path(save_path).joinpath(f"geo_code_{year}.json")) if save_path else f"geo_code_{year}.json"
 
     if os.path.exists(file) and os.path.getsize(file):
-        rex = r"""(?<=[}\]"'])\s*,\s*(?!\s*[{["'])"""
         try:
-            result = json.loads(re.sub(rex, "", open(file, 'r', encoding="utf-8").read(), 0))
+            result = json.loads(open(file, 'r', encoding="utf-8").read())
             if result.get("data", None):
                 max_code = max([int(x) for x in result["data"].keys()])
             else:
