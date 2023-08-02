@@ -1,7 +1,9 @@
-__all__ = ["get_page_element"]
+__all__ = ["get_page_element", "get_all_code"]
 
+import json
 import random
 import os
+import re
 import requests
 from tqdm import tqdm
 from pathlib import Path
@@ -78,56 +80,75 @@ def get_all_code(year: int, save_path: str = None):
     """
     file = str(Path(save_path).joinpath(f"geo_code_{year}.json")) if save_path else f"geo_code_{year}.json"
 
-    if os.path.exists(file):
-        raise FileExistsError(f"json文件已存在，请检查{file}")
-
-    with open(file, 'w', encoding="utf-8") as f:
-        f.write(
-            """{{\n\t"title": "全国统计用区划代码和城乡划分代码（国家统计局{year}年度）",\n\t"year": {year},\n\t"data": {{\n"""
-            .format(year=year))
-
-        provinces = get_page_element(url=f"http://www.stats.gov.cn/sj/tjbz/tjyqhdmhcxhfdm/{year}")
-        print("开始获取区划代码...")
+    if os.path.exists(file) and os.path.getsize(file):
+        rex = r"""(?<=[}\]"'])\s*,\s*(?!\s*[{["'])"""
         try:
-            for province_i, (province, province_v) in enumerate(provinces.items()):
-                if not province_v["next_level_url"]:
-                    f.write(f"\t\t\"{province_v['code']}\": \"{province}\",\n")
+            result = json.loads(re.sub(rex, "", open(file, 'r', encoding="utf-8").read(), 0))
+            if result.get("data", None):
+                max_code = max([int(x) for x in result["data"].keys()])
+            else:
+                result = {
+                    "title": "全国统计用区划代码和城乡划分代码（国家统计局2009年度）",
+                    "year": 2009,
+                    "data": {},
+                }
+                max_code = 0
+        except Exception:
+            raise ValueError("文件内容异常，请检查，无法转换为Json格式")
+    else:
+        result = {
+            "title": "全国统计用区划代码和城乡划分代码（国家统计局2009年度）",
+            "year": 2009,
+            "data": {},
+        }
+        max_code = 0
+
+    provinces = get_page_element(url=f"http://www.stats.gov.cn/sj/tjbz/tjyqhdmhcxhfdm/{year}")
+    print("开始获取区划代码...")
+    try:
+        for province_i, (province, province_v) in enumerate(provinces.items()):
+            if result.get("data", None):
+                max_province_code = int(str(max_code)[0:2] + "0000000000")
+                if int(province_v["code"]) < max_province_code:
                     continue
-                f.write(f"\t\t\"{province_v['code']}\": \"{province}\",\n")
-                cities = get_page_element(url=province_v["next_level_url"])
-                for city, city_v in cities.items():
-                    if not city_v["next_level_url"]:
-                        f.write(f"\t\t\"{city_v['code']}\": \"{city}\",\n")
+            if not province_v["next_level_url"]:
+                result["data"].update({province_v['code']: province})
+                continue
+            result["data"].update({province_v['code']: province})
+            cities = get_page_element(url=province_v["next_level_url"])
+            for city, city_v in cities.items():
+                if result.get("data", None):
+                    max_province_code = int(str(max_code)[0:4] + "00000000")
+                    if int(city_v["code"]) < max_province_code:
                         continue
-                    f.write(f"\t\t\"{city_v['code']}\": \"{city}\",\n")
-                    counties = get_page_element(url=city_v["next_level_url"])
-                    for county, county_v in counties.items():
-                        if not county_v["next_level_url"]:
-                            f.write(f"\t\t\"{county_v['code']}\": \"{county}\",\n")
+                if not city_v["next_level_url"]:
+                    result["data"].update({city_v['code']: city})
+                    continue
+                result["data"].update({city_v['code']: city})
+                counties = get_page_element(url=city_v["next_level_url"])
+                for county, county_v in counties.items():
+                    if not county_v["next_level_url"]:
+                        result["data"].update({county_v['code']: county})
+                        continue
+                    result["data"].update({county_v['code']: county})
+                    towns = get_page_element(url=county_v["next_level_url"])
+                    for town, town_v in tqdm(towns.items(), desc=f"{province}-{city}-{county}"):
+                        if town_v["next_level_url"]:
+                            result["data"].update({town_v['code']: town})
                             continue
-                        f.write(f"\t\t\"{county_v['code']}\": \"{county}\",\n")
-                        towns = get_page_element(url=county_v["next_level_url"])
-                        for town, town_v in tqdm(towns.items(), desc=f"{province}-{city}-{county}"):
-                            if not town_v["next_level_url"]:
-                                f.write(f"\t\t\"{town_v['code']}\": \"{town}\",\n")
-                                continue
-                            f.write(f"\t\t\"{town_v['code']}\": \"{town}\",\n")
-                            villages = get_page_element(url=town_v["next_level_url"])
-                            for village_i, (village, village_v) in enumerate(villages.items()):
-                                if not village_v["next_level_url"]:
-                                    if province_i == len(provinces) - 1 and village_i == len(villages) - 1:
-                                        f.write(f"\t\t\"{village_v['code']}\": \"{village}\"\n")
-                                    else:
-                                        f.write(f"\t\t\"{village_v['code']}\": \"{village}\",\n")
-                                    continue
-                                if province_i == len(provinces) - 1 and village_i == len(villages) - 1:
-                                    f.write(f"\t\t\"{village_v['code']}\": \"{village}\"\n")
-                                else:
-                                    f.write(f"\t\t\"{village_v['code']}\": \"{village}\",\n")
-        except Exception as err:
-            print(f"程序异常，错误信息为:{err}")
-        finally:
-            f.write("""\t}\n}""")
+                        result["data"].update({town_v['code']: town})
+                        villages = get_page_element(url=town_v["next_level_url"])
+                        for village_i, (village, village_v) in enumerate(villages.items()):
+                            result["data"].update({village_v['code']: village})
+
+        with open(file, mode='w', encoding="utf-8") as f:
+            f.write(json.dumps(result, ensure_ascii=False))
             f.close()
 
-    print("区划代码获取完成！")
+        print("区划代码获取完成！")
+    except Exception as err:
+        print(f"程序异常，错误信息为:{err}")
+    finally:
+        with open(file, mode='w', encoding="utf-8") as f:
+            f.write(json.dumps(result, ensure_ascii=False))
+            f.close()
