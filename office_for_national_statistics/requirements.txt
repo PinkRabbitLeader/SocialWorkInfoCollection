@@ -1,1 +1,4 @@
 requests
+tqdm
+bs4
+retrying
