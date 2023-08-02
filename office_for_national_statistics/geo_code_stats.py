@@ -127,12 +127,20 @@ def get_all_code(year: int, save_path: str = None):
                 result["data"].update({city_v['code']: city})
                 counties = get_page_element(url=city_v["next_level_url"])
                 for county, county_v in counties.items():
+                    if result.get("data", None):
+                        max_province_code = int(str(max_code)[0:6] + "000000")
+                        if int(province_v["code"]) < max_province_code:
+                            continue
                     if not county_v["next_level_url"]:
                         result["data"].update({county_v['code']: county})
                         continue
                     result["data"].update({county_v['code']: county})
                     towns = get_page_element(url=county_v["next_level_url"])
                     for town, town_v in tqdm(towns.items(), desc=f"{province}-{city}-{county}"):
+                        if result.get("data", None):
+                            max_province_code = int(str(max_code)[0:9] + "000")
+                            if int(province_v["code"]) < max_province_code:
+                                continue
                         if town_v["next_level_url"]:
                             result["data"].update({town_v['code']: town})
                             continue
