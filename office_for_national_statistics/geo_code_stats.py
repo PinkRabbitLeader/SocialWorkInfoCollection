@@ -30,7 +30,10 @@ def get_page_element(url: str) -> dict:
 
     if response.status_code != 200:
         raise ConnectionError(f"数据获取错误，状态码为：{response.status_code}")
-    html_parser = BeautifulSoup(response.content.decode('gbk'), 'html.parser')
+    try:
+        html_parser = BeautifulSoup(response.content.decode('gbk'), 'html.parser')
+    except UnicodeDecodeError:
+        html_parser = BeautifulSoup(response.content.decode('utf-8'), 'html.parser')
 
     if url.strip("/")[-4:] != "html":
         page_element = {
