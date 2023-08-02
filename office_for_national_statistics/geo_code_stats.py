@@ -2,7 +2,6 @@ __all__ = ["get_page_element", "get_all_code"]
 
 import json
 import random
-import os
 import requests
 from tqdm import tqdm
 from pathlib import Path
@@ -72,11 +71,11 @@ def get_all_code(year: int, save_path: str = None):
     :param save_path: 字符串类型 -> 保存路径 -> 非必需，默认当前路径
     :return:
     """
-    file = str(Path(save_path).joinpath(f"geo_code_{year}.json")) if save_path else f"geo_code_{year}.json"
+    output = Path(save_path or ".") / f"geo_code_{year}.json"
 
-    if os.path.exists(file) and os.path.getsize(file):
+    if output.exists() and output.stat().st_size:
         try:
-            result = json.loads(open(file, 'r', encoding="utf-8").read())
+            result = json.load(output.open('r', encoding="utf-8"))
             if result.get("data", None):
                 max_code = max([int(x) for x in result["data"].keys()])
             else:
@@ -145,14 +144,12 @@ def get_all_code(year: int, save_path: str = None):
                         for village_i, (village, village_v) in enumerate(villages.items()):
                             result["data"].update({village_v['code']: village})
 
-        with open(file, mode='w', encoding="utf-8") as f:
-            f.write(json.dumps(result, ensure_ascii=False))
-            f.close()
+        with output.open(mode='w', encoding="utf-8") as f:
+            json.dump(result, f, ensure_ascii=False)
 
         print("区划代码获取完成！")
     except Exception as err:
         raise Exception(f"程序异常，错误信息为:{err}")
     finally:
-        with open(file, mode='w', encoding="utf-8") as f:
-            f.write(json.dumps(result, ensure_ascii=False))
-            f.close()
+        with output.open(mode='w', encoding="utf-8") as f:
+            json.dump(result, f, ensure_ascii=False)
