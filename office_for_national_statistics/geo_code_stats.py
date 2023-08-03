@@ -134,14 +134,16 @@ def get_all_code(year: int, save_path: str = None):
                     for town, town_v in tqdm(towns.items(), desc=f"{province}-{city}-{county}"):
                         if result.get("data", None):
                             max_province_code = int(str(max_code)[0:9] + "000")
-                            if int(province_v["code"]) < max_province_code:
+                            if int(town_v["code"]) < max_province_code:
                                 continue
                         if not town_v["next_level_url"]:
                             result["data"].update({town_v['code']: town})
                             continue
                         result["data"].update({town_v['code']: town})
                         villages = get_page_element(url=town_v["next_level_url"])
-                        for village_i, (village, village_v) in enumerate(villages.items()):
+                        for village, village_v in villages.items():
+                            if result.get("data", None) and int(village_v["code"]) > max_code:
+                                continue
                             result["data"].update({village_v['code']: village})
 
         with output.open(mode='w', encoding="utf-8") as f:
