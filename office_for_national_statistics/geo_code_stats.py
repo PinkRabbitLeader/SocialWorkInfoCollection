@@ -124,7 +124,7 @@ def get_all_code(year: int, save_path: str = None):
                 for county, county_v in counties.items():
                     if result.get("data", None):
                         max_province_code = int(str(max_code)[0:6] + "000000")
-                        if int(province_v["code"]) < max_province_code:
+                        if int(county_v["code"]) < max_province_code:
                             continue
                     if not county_v["next_level_url"]:
                         result["data"].update({county_v['code']: county})
