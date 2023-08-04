@@ -14,6 +14,8 @@ from pathlib import Path
 from bs4 import BeautifulSoup
 from utils.web_scraping_tools import user_agent_list
 
+proxy, proxies = None, None
+
 
 class ProgressBar:
     """
@@ -25,19 +27,20 @@ class ProgressBar:
         self.progress_data = {}
         self.progress_semaphore = threading.Semaphore()
 
-    def update(self, thread_id: str, progress: int):
+    def update(self, thread_id: str, progress: int, data_length: int):
         """更新进度条
 
         :param thread_id: 字符串类型 -> 设置进度条名称
         :param progress: 整数类型 -> 设置进度
+        :param data_length: 整数类型 -> 任务长度
         :return: None
         """
-        progress = min(max(progress, 0), 100)  # Ensure progress is between 0 and 100
+        progress = ((progress + 1) / data_length) * 100  # Ensure progress is between 0 and 100
         self.progress_semaphore.acquire()
         self.progress_data[thread_id] = progress
+        self.display_progress()
         if self.progress_data[thread_id] == 100:
             del self.progress_data[thread_id]
-        self.display_progress()
         self.progress_semaphore.release()
 
     def display_progress(self):
@@ -48,7 +51,7 @@ class ProgressBar:
         bars = "\r"
         for thread_id in sorted(self.progress_data.keys()):
             progress = self.progress_data[thread_id]
-            bar = (f"Thread-{thread_id}:["
+            bar = (f"{thread_id}:["
                    f"{'=' * int(self.bar_length * progress / 100)}"
                    f"{' ' * (self.bar_length - int(self.bar_length * progress / 100))}"
                    f"] {progress:.1f}%\t\t\t")
@@ -57,12 +60,34 @@ class ProgressBar:
         sys.stdout.flush()
 
 
-def delete_proxy(delete_proxy_ip_host: str, proxy: str):
+def get_proxy(proxy_pool_host: str):
+    global proxy
+    global proxies
+    if proxy_pool_host:
+        if "http" not in proxy_pool_host or "https" not in proxy_pool_host:
+            raise Exception("请填写完整的代理池IP，例如：https://127.0.0.1:8080/get/ip/")
+        proxy_pool_response = requests.get(proxy_pool_host).json()
+        proxy = proxy_pool_response.get("proxy")
+        if not proxy_pool_response.get("https"):
+            proxies = {
+                "http": "http://{}".format(proxy)
+            }
+        else:
+            proxies = {
+                "https": "https://{}".format(proxy)
+            }
+    else:
+        proxy = None
+        proxies = None
+
+
+def delete_proxy(delete_proxy_ip_host: str):
     """删除代理IP
     注意：可使用 https://github.com/jhao104/proxy_pool 项目获取免费代理 IP
 
     :return:
     """
+    global proxy
     if delete_proxy_ip_host and proxy:
         requests.get(delete_proxy_ip_host, params={"proxy": proxy})
     else:
@@ -76,29 +101,16 @@ def get_page_element(url: str, proxy_pool_host: str = None, delete_proxy_ip_host
     :param delete_proxy_ip_host: 字符串类型 -> 删除代理池ip地址
     :return province_url: 字典类型 -> key值为省份，value值为链接
     """
+    global proxy
+    global proxies
     retry_num = 0
+
     while True:
         try:
             headers = {
                 'Host': 'www.stats.gov.cn',
                 'User-Agent': random.choice(user_agent_list)
             }
-            if proxy_pool_host:
-                if "http" not in proxy_pool_host or "https" not in proxy_pool_host:
-                    raise Exception("请填写完整的代理池IP，例如：https://127.0.0.1:8080/get/ip/")
-                proxy_pool_response = requests.get(proxy_pool_host).json()
-                proxy = proxy_pool_response.get("proxy")
-                if not proxy_pool_response.get("https"):
-                    proxies = {
-                        "http": "http://{}".format(proxy)
-                    }
-                else:
-                    proxies = {
-                        "https": "https://{}".format(proxy)
-                    }
-            else:
-                proxy = None
-                proxies = None
 
             response = requests.get(
                 url=url,
@@ -162,9 +174,10 @@ def get_page_element(url: str, proxy_pool_host: str = None, delete_proxy_ip_host
                     } for x in html_parser.select(select_element[len(url.split("/")[-1].strip(".html"))])
                 }
 
-                delete_proxy(delete_proxy_ip_host, proxy)
+                delete_proxy(delete_proxy_ip_host)
                 return page_element
         except Exception as e:
+            get_proxy(proxy_pool_host=proxy_pool_host)
             retry_num += 1
             if retry_num == 50000:
                 raise e
@@ -212,6 +225,10 @@ def get_all_code(
         }
         max_code = 0
     print(f"开始获取{year}年区划代码...")
+    global proxy
+    global proxies
+    get_proxy(proxy_pool_host=proxy_pool_host)
+
     provinces = get_page_element(
         url=f"http://www.stats.gov.cn/sj/tjbz/tjyqhdmhcxhfdm/{year}",
         proxy_pool_host=proxy_pool_host,
@@ -268,7 +285,8 @@ def get_all_code(
                             if not progress_bar else enumerate(towns.items())
                     ):
                         if progress_bar:
-                            progress_bar.update(thread_id=f"{year}-{province}-{city}-{county}-{town}", progress=town_i)
+                            progress_bar.update(thread_id=f"{year}-{province}-{city}-{county}",
+                                                progress=town_i, data_length=len(towns))
                         if result.get("data", None):
                             max_province_code = int(str(max_code)[0:9] + "000")
                             if int(town_v["code"]) < max_province_code:
