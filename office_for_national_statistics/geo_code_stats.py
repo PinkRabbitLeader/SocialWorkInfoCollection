@@ -14,7 +14,7 @@ from pathlib import Path
 from bs4 import BeautifulSoup
 from utils.web_scraping_tools import user_agent_list
 
-proxy, proxies = None, None
+proxy_ip = {}
 
 
 class ProgressBar:
@@ -60,14 +60,14 @@ class ProgressBar:
         sys.stdout.flush()
 
 
-def get_proxy(proxy_pool_host: str):
-    global proxy
-    global proxies
+def get_proxy(proxy_pool_host: str, year: int):
+    global proxy_ip
     if proxy_pool_host:
         if "http" not in proxy_pool_host or "https" not in proxy_pool_host:
             raise Exception("请填写完整的代理池IP，例如：https://127.0.0.1:8080/get/ip/")
         proxy_pool_response = requests.get(proxy_pool_host).json()
         proxy = proxy_pool_response.get("proxy")
+
         if not proxy_pool_response.get("https"):
             proxies = {
                 "http": "http://{}".format(proxy)
@@ -76,33 +76,42 @@ def get_proxy(proxy_pool_host: str):
             proxies = {
                 "https": "https://{}".format(proxy)
             }
+
+        if proxy_ip.get(year, None):
+            proxy_ip[year] = {"proxy": proxy, "proxies": proxies}
+        else:
+            proxy_ip.update({year: {"proxy": proxy_pool_response.get("proxy"), "proxies": proxies}})
     else:
-        proxy = None
-        proxies = None
+        if proxy_ip.get(year, None):
+            proxy_ip[year] = {"proxy": None, "proxies": None}
+        else:
+            proxy_ip.update({year: {"proxy": None, "proxies": None}})
 
 
-def delete_proxy(delete_proxy_ip_host: str):
+def delete_proxy(delete_proxy_ip_host: str, year: int):
     """删除代理IP
     注意：可使用 https://github.com/jhao104/proxy_pool 项目获取免费代理 IP
 
+    :param delete_proxy_ip_host: 字符串类型 -> 删除代理ip接口的地址
+    :param year: 整数类型 -> 年份
     :return:
     """
-    global proxy
-    if delete_proxy_ip_host and proxy:
-        requests.get(delete_proxy_ip_host, params={"proxy": proxy})
+    global proxy_ip
+    if delete_proxy_ip_host and proxy_ip[year]["proxy"]:
+        requests.get(delete_proxy_ip_host, params={"proxy": proxy_ip[year]["proxy"]})
     else:
         pass
 
 
-def get_page_element(url: str, proxy_pool_host: str = None, delete_proxy_ip_host: str = None) -> dict:
+def get_page_element(url: str, year: int, proxy_pool_host: str = None, delete_proxy_ip_host: str = None) -> dict:
     """获取省份用于跳转的URL
     :param url: 字符串类型 -> 网页链接 -> 必需
+    :param year: 整数类型 -> 年份 -> 必需
     :param proxy_pool_host: 字符串类型 -> 代理池地址
     :param delete_proxy_ip_host: 字符串类型 -> 删除代理池ip地址
     :return province_url: 字典类型 -> key值为省份，value值为链接
     """
-    global proxy
-    global proxies
+    global proxy_ip
     retry_num = 0
 
     while True:
@@ -116,7 +125,7 @@ def get_page_element(url: str, proxy_pool_host: str = None, delete_proxy_ip_host
                 url=url,
                 headers=headers,
                 verify=False,
-                proxies=proxies,
+                proxies=proxy_ip[year]["proxies"],
                 timeout=1
             )
 
@@ -135,6 +144,8 @@ def get_page_element(url: str, proxy_pool_host: str = None, delete_proxy_ip_host
                     raise ConnectionError("数据获取错误，错误为：Please enable JavaScript and refresh the page.")
                 if "认证失败，无法访问系统资源" in str(html_parser):
                     raise ConnectionError("数据获取错误，错误为：401，无法访问系统资源.")
+                if "cannot find token param." in str(html_parser):
+                    raise ConnectionError("数据获取错误，错误为：0x01900012, cannot find token param.")
             except UnicodeDecodeError:
                 with warnings.catch_warnings(record=True) as w:
                     html_parser = BeautifulSoup(response.content.decode('utf-8'), 'html.parser')
@@ -147,6 +158,8 @@ def get_page_element(url: str, proxy_pool_host: str = None, delete_proxy_ip_host
                     raise ConnectionError("数据获取错误，错误为：Please enable JavaScript and refresh the page.")
                 if "认证失败，无法访问系统资源" in str(html_parser):
                     raise ConnectionError("数据获取错误，错误为：401，无法访问系统资源.")
+                if "cannot find token param." in str(html_parser):
+                    raise ConnectionError("数据获取错误，错误为：0x01900012, cannot find token param.")
             if url.strip("/")[-4:] != "html":
                 page_element = {
                     i.get_text(): {
@@ -174,10 +187,10 @@ def get_page_element(url: str, proxy_pool_host: str = None, delete_proxy_ip_host
                     } for x in html_parser.select(select_element[len(url.split("/")[-1].strip(".html"))])
                 }
 
-                delete_proxy(delete_proxy_ip_host)
                 return page_element
         except Exception as e:
-            get_proxy(proxy_pool_host=proxy_pool_host)
+            delete_proxy(delete_proxy_ip_host=delete_proxy_ip_host, year=year)
+            get_proxy(proxy_pool_host=proxy_pool_host, year=year)
             retry_num += 1
             if retry_num == 50000:
                 raise e
@@ -225,14 +238,13 @@ def get_all_code(
         }
         max_code = 0
     print(f"开始获取{year}年区划代码...")
-    global proxy
-    global proxies
-    get_proxy(proxy_pool_host=proxy_pool_host)
-
+    global proxy_ip
+    get_proxy(proxy_pool_host=proxy_pool_host, year=year)
     provinces = get_page_element(
         url=f"http://www.stats.gov.cn/sj/tjbz/tjyqhdmhcxhfdm/{year}",
         proxy_pool_host=proxy_pool_host,
-        delete_proxy_ip_host=delete_proxy_ip_host
+        delete_proxy_ip_host=delete_proxy_ip_host,
+        year=year
     )
     try:
         for province, province_v in provinces.items():
@@ -250,7 +262,8 @@ def get_all_code(
             cities = get_page_element(
                 url=province_v["next_level_url"],
                 proxy_pool_host=proxy_pool_host,
-                delete_proxy_ip_host=delete_proxy_ip_host
+                delete_proxy_ip_host=delete_proxy_ip_host,
+                year=year
             )
             for city, city_v in cities.items():
                 if result.get("data", None):
@@ -264,7 +277,8 @@ def get_all_code(
                 counties = get_page_element(
                     url=city_v["next_level_url"],
                     proxy_pool_host=proxy_pool_host,
-                    delete_proxy_ip_host=delete_proxy_ip_host
+                    delete_proxy_ip_host=delete_proxy_ip_host,
+                    year=year
                 )
                 for county, county_v in counties.items():
                     if result.get("data", None):
@@ -278,7 +292,8 @@ def get_all_code(
                     towns = get_page_element(
                         url=county_v["next_level_url"],
                         proxy_pool_host=proxy_pool_host,
-                        delete_proxy_ip_host=delete_proxy_ip_host
+                        delete_proxy_ip_host=delete_proxy_ip_host,
+                        year=year
                     )
                     for town_i, (town, town_v) in (
                             enumerate(tqdm(towns.items(), desc=f"{province}-{city}-{county}"))
@@ -298,7 +313,8 @@ def get_all_code(
                         villages = get_page_element(
                             url=town_v["next_level_url"],
                             proxy_pool_host=proxy_pool_host,
-                            delete_proxy_ip_host=delete_proxy_ip_host
+                            delete_proxy_ip_host=delete_proxy_ip_host,
+                            year=year
                         )
                         for village, village_v in villages.items():
                             if result.get("data", None) and int(village_v["code"]) < max_code:
@@ -355,4 +371,4 @@ def multithreading_get_all_code(
             try:
                 _ = f.result()
             except Exception as e:
-                print(f"第{i}个发生错误，错误为：{e}")
+                raise Exception(f"第{i}个发生错误，错误为：{e}")
