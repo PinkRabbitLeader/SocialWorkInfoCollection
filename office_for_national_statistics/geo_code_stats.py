@@ -121,7 +121,7 @@ def get_page_element(url: str, proxy_pool_host: str = None, delete_proxy_ip_host
                         html_parser = BeautifulSoup(response.content.decode('gbk'), 'lxml')
                 if html_parser.find("h1"):
                     raise ConnectionError("数据获取错误，错误为：Please enable JavaScript and refresh the page.")
-                if "401" in str(html_parser):
+                if "认证失败，无法访问系统资源" in str(html_parser):
                     raise ConnectionError("数据获取错误，错误为：401，无法访问系统资源.")
             except UnicodeDecodeError:
                 with warnings.catch_warnings(record=True) as w:
@@ -133,7 +133,7 @@ def get_page_element(url: str, proxy_pool_host: str = None, delete_proxy_ip_host
                         html_parser = BeautifulSoup(response.content.decode('utf-8'), 'lxml')
                 if html_parser.find("h1"):
                     raise ConnectionError("数据获取错误，错误为：Please enable JavaScript and refresh the page.")
-                if "401" in str(html_parser):
+                if "认证失败，无法访问系统资源" in str(html_parser):
                     raise ConnectionError("数据获取错误，错误为：401，无法访问系统资源.")
             if url.strip("/")[-4:] != "html":
                 page_element = {
@@ -264,7 +264,7 @@ def get_all_code(
                         delete_proxy_ip_host=delete_proxy_ip_host
                     )
                     for town_i, (town, town_v) in (
-                            tqdm(enumerate(towns.items()), desc=f"{province}-{city}-{county}")
+                            enumerate(tqdm(towns.items(), desc=f"{province}-{city}-{county}"))
                             if not progress_bar else enumerate(towns.items())
                     ):
                         if progress_bar:
