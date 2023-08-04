@@ -1,8 +1,11 @@
 __all__ = ["get_page_element", "get_all_code"]
 
+import sys
 import json
 import random
 import requests
+import threading
+import concurrent.futures
 from tqdm import tqdm
 from pathlib import Path
 from bs4 import BeautifulSoup
@@ -10,10 +13,78 @@ from retrying import retry
 from utils.web_scraping_tools import user_agent_list
 
 
-@retry(stop_max_attempt_number=10, wait_random_min=2000, wait_random_max=10000)
-def get_page_element(url: str) -> dict:
+class ProgressBar:
+    """
+    进度条函数
+    """
+
+    def __init__(self):
+        self.bar_length = 30
+        self.progress_data = {}
+        self.progress_semaphore = threading.Semaphore()
+
+    def update(self, thread_id: str, progress: int):
+        """更新进度条
+
+        :param thread_id: 字符串类型 -> 设置进度条名称
+        :param progress: 整数类型 -> 设置进度
+        :return: None
+        """
+        progress = min(max(progress, 0), 100)  # Ensure progress is between 0 and 100
+        self.progress_semaphore.acquire()
+        self.progress_data[thread_id] = progress
+        if self.progress_data[thread_id] == 100:
+            del self.progress_data[thread_id]
+        self.display_progress()
+        self.progress_semaphore.release()
+
+    def display_progress(self):
+        """显示进度
+
+        :return: None
+        """
+        bars = "\r"
+        for thread_id in sorted(self.progress_data.keys()):
+            progress = self.progress_data[thread_id]
+            bar = (f"Thread-{thread_id}:["
+                   f"{'=' * int(self.bar_length * progress / 100)}"
+                   f"{' ' * (self.bar_length - int(self.bar_length * progress / 100))}"
+                   f"] {progress:.1f}%\t\t\t")
+            bars += bar
+        sys.stdout.write(bars)
+        sys.stdout.flush()
+
+
+def get_proxy(host: str) -> dict:
+    """获取代理池IP
+    注意：需要配合 https://github.com/jhao104/proxy_pool 项目使用
+
+    :param host: 字符串类型 -> 代理池地址 -> 默认 http://127.0.0.1:5010
+    :return: proxy_pool_response -> 字典类型 -> 代理池响应
+    """
+    if "http" not in host or "https" not in host:
+        print("请使用正确的代理池IP!")
+        exit(1)
+    return requests.get(f"{host}/get/").json()
+
+
+def delete_proxy(proxy):
+    """删除代理IP
+    注意：需要配合 https://github.com/jhao104/proxy_pool 项目使用
+
+    :return:
+    """
+    if proxy:
+        requests.get("http://127.0.0.1:5010/delete/?proxy={}".format(proxy))
+    else:
+        pass
+
+
+@retry(wait_random_min=2000, wait_random_max=10000)
+def get_page_element(url: str, proxy_pool_host: str = None) -> dict:
     """获取省份用于跳转的URL
     :param url: 字符串类型 -> 网页链接 -> 必需
+    :param proxy_pool_host: 字符串类型 -> 代理池地址
     :return province_url: 字典类型 -> key值为省份，value值为链接
     """
     headers = {
@@ -21,18 +92,30 @@ def get_page_element(url: str) -> dict:
         'User-Agent': random.choice(user_agent_list)
     }
 
+    if proxy_pool_host:
+        proxy = get_proxy(host=proxy_pool_host).get("proxy")
+        proxies = {"http": "http://{}".format(proxy)}
+    else:
+        proxy = None
+        proxies = None
+
     response = requests.get(
         url=url,
         headers=headers,
-        verify=False
+        verify=False,
+        proxies=proxies,
+        timeout=5
     )
-
     if response.status_code != 200:
         raise ConnectionError(f"数据获取错误，状态码为：{response.status_code}")
     try:
         html_parser = BeautifulSoup(response.content.decode('gbk'), 'html.parser')
+        if html_parser.find("h1"):
+            raise ConnectionError("数据获取错误，错误为：Please enable JavaScript and refresh the page.")
     except UnicodeDecodeError:
         html_parser = BeautifulSoup(response.content.decode('utf-8'), 'html.parser')
+        if html_parser.find("h1"):
+            raise ConnectionError("数据获取错误，错误为：Please enable JavaScript and refresh the page.")
 
     if url.strip("/")[-4:] != "html":
         page_element = {
@@ -60,15 +143,19 @@ def get_page_element(url: str) -> dict:
                 ) if x.findAll('td')[1].find('a') else None
             } for x in html_parser.select(select_element[len(url.split("/")[-1].strip(".html"))])
         }
-
+        delete_proxy(proxy)
         return page_element
 
 
-def get_all_code(year: int, save_path: str = None):
+def get_all_code(year: int, save_path: str = None, progress_bar: ProgressBar = None, proxy_pool_host: str = None):
     """获取某一年份所有区划代码
+
+    使用方法：get_all_code(years=2009)
 
     :param year: 整数类型 -> 年份，填入需要获取的那一年 -> 必需
     :param save_path: 字符串类型 -> 保存路径 -> 非必需，默认当前路径
+    :param progress_bar: 进度条 -> ProgressBar函数
+    :param proxy_pool_host: 字符串类型 -> 代理池地址
     :return:
     """
     output = Path(save_path or ".") / f"geo_code_{year}.json"
@@ -94,11 +181,13 @@ def get_all_code(year: int, save_path: str = None):
             "data": {},
         }
         max_code = 0
-
-    provinces = get_page_element(url=f"http://www.stats.gov.cn/sj/tjbz/tjyqhdmhcxhfdm/{year}")
     print("开始获取区划代码...")
+    provinces = get_page_element(
+        url=f"http://www.stats.gov.cn/sj/tjbz/tjyqhdmhcxhfdm/{year}",
+        proxy_pool_host=proxy_pool_host
+    )
     try:
-        for province_i, (province, province_v) in enumerate(provinces.items()):
+        for province, province_v in provinces.items():
             if result.get("data", None):
                 max_province_code = int(str(max_code)[0:2] + "0000000000")
                 if province_v["code"] and int(province_v["code"]) < max_province_code:
@@ -110,7 +199,7 @@ def get_all_code(year: int, save_path: str = None):
                 result["data"].update({province_v["code"]: province})
                 continue
             result["data"].update({province_v["code"]: province})
-            cities = get_page_element(url=province_v["next_level_url"])
+            cities = get_page_element(url=province_v["next_level_url"], proxy_pool_host=proxy_pool_host)
             for city, city_v in cities.items():
                 if result.get("data", None):
                     max_province_code = int(str(max_code)[0:4] + "00000000")
@@ -120,7 +209,7 @@ def get_all_code(year: int, save_path: str = None):
                     result["data"].update({city_v['code']: city})
                     continue
                 result["data"].update({city_v['code']: city})
-                counties = get_page_element(url=city_v["next_level_url"])
+                counties = get_page_element(url=city_v["next_level_url"], proxy_pool_host=proxy_pool_host)
                 for county, county_v in counties.items():
                     if result.get("data", None):
                         max_province_code = int(str(max_code)[0:6] + "000000")
@@ -130,8 +219,13 @@ def get_all_code(year: int, save_path: str = None):
                         result["data"].update({county_v['code']: county})
                         continue
                     result["data"].update({county_v['code']: county})
-                    towns = get_page_element(url=county_v["next_level_url"])
-                    for town, town_v in tqdm(towns.items(), desc=f"{province}-{city}-{county}"):
+                    towns = get_page_element(url=county_v["next_level_url"], proxy_pool_host=proxy_pool_host)
+                    for town_i, (town, town_v) in (
+                            tqdm(enumerate(towns.items()), desc=f"{province}-{city}-{county}")
+                            if not progress_bar else enumerate(towns.items())
+                    ):
+                        if progress_bar:
+                            progress_bar.update(thread_id=f"{year}-{province}-{city}-{county}", progress=town_i)
                         if result.get("data", None):
                             max_province_code = int(str(max_code)[0:9] + "000")
                             if int(town_v["code"]) < max_province_code:
@@ -140,9 +234,9 @@ def get_all_code(year: int, save_path: str = None):
                             result["data"].update({town_v['code']: town})
                             continue
                         result["data"].update({town_v['code']: town})
-                        villages = get_page_element(url=town_v["next_level_url"])
+                        villages = get_page_element(url=town_v["next_level_url"], proxy_pool_host=proxy_pool_host)
                         for village, village_v in villages.items():
-                            if result.get("data", None) and int(village_v["code"]) > max_code:
+                            if result.get("data", None) and int(village_v["code"]) < max_code:
                                 continue
                             result["data"].update({village_v['code']: village})
 
@@ -155,3 +249,27 @@ def get_all_code(year: int, save_path: str = None):
     finally:
         with output.open(mode='w', encoding="utf-8") as f:
             json.dump(result, f, ensure_ascii=False)
+
+
+def multithreading_get_all_code(years: list, save_path: str = None, proxy_pool_host: str = None):
+    """多线程获取所有区划代码
+    注意：该方法依赖代理池，因此需要自备代理池
+
+    使用方法：multithreading_get_all_code(
+                years=[2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022]
+            )
+
+    项目采用开源免费代理池项目：https://github.com/jhao104/proxy_pool
+
+    :param years: 列表类型 -> 需要获取的年份 -> 必需
+    :param save_path: 字符串类型 -> 保存路径 -> 非必需
+    :param proxy_pool_host: 字符串类型 -> 代理池地址 -> 非必需
+    :return:
+    """
+    progress_bar = ProgressBar()
+
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        futures = [
+            executor.submit(get_all_code, years[i], save_path, progress_bar, proxy_pool_host) for i in range(len(years))
+        ]
+        concurrent.futures.wait(futures)
