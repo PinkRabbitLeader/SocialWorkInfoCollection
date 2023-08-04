@@ -1,4 +1,6 @@
-__all__ = ["get_page_element", "get_all_code"]
+__all__ = [
+    "get_page_element", "ProgressBar", "get_proxy", "delete_proxy", "get_all_code", "multithreading_get_all_code"
+]
 
 import sys
 import json
