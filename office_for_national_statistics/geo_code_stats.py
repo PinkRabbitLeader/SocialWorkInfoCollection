@@ -2,16 +2,18 @@ __all__ = [
     "get_page_element", "ProgressBar", "delete_proxy", "get_all_code", "multithreading_get_all_code"
 ]
 
-import sys
+import concurrent.futures
 import json
 import random
-import warnings
-import requests
+import sys
 import threading
-import concurrent.futures
-from tqdm import tqdm
+import warnings
 from pathlib import Path
+
+import requests
 from bs4 import BeautifulSoup
+from tqdm import tqdm
+
 from utils.web_scraping_tools import user_agent_list
 
 proxy_ip = {}
@@ -240,6 +242,10 @@ def get_page_element(
             if retry_num:
                 retry_num -= 1
         except requests.exceptions.ConnectionError:
+            update_proxy(proxy_pool_host=proxy_pool_host, delete_proxy_ip_host=delete_proxy_ip_host, year=year)
+            if retry_num:
+                retry_num -= 1
+        except requests.exceptions.ChunkedEncodingError:
             update_proxy(proxy_pool_host=proxy_pool_host, delete_proxy_ip_host=delete_proxy_ip_host, year=year)
             if retry_num:
                 retry_num -= 1
