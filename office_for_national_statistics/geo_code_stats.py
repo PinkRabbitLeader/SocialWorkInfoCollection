@@ -212,7 +212,7 @@ def get_page_element(
             if not url.rstrip("/").endswith('html'):
                 page_element = {
                     i.get_text(): {
-                        "code": a.attrs['href'].strip(".html").ljust(CODE_DIGITS, 12),
+                        "code": a.attrs['href'].strip(".html").ljust(CODE_DIGITS, '0'),
                         "next_level_url": ensure_endswith(url, '/') + a.attrs['href'],
                     } if (a := i.find('a')) else {
                         "code": None,
