@@ -131,40 +131,44 @@ def get_page_element(
                 headers=headers,
                 verify=False,
                 proxies=proxy_ip[year]["proxies"],
-                timeout=1
+                timeout=2
             )
 
             if response.status_code != 200:
                 raise ConnectionError(f"数据获取错误，状态码为：{response.status_code}")
-
-            try:
-                with warnings.catch_warnings(record=True) as w:
+            with warnings.catch_warnings(record=True) as w:
+                try:
                     html_parser = BeautifulSoup(response.content.decode('gbk'), 'html.parser')
                     if w and issubclass(
                             w[-1].category,
                             UserWarning
                     ) and "MarkupResemblesLocatorWarning" in str(w[-1].message):
                         html_parser = BeautifulSoup(response.content.decode('gbk'), 'lxml')
-                if html_parser.find("h1"):
-                    raise ConnectionError("数据获取错误，错误为：Please enable JavaScript and refresh the page.")
-                if "认证失败，无法访问系统资源" in str(html_parser):
-                    raise ConnectionError("数据获取错误，错误为：401，无法访问系统资源.")
-                if "cannot find token param." in str(html_parser):
-                    raise ConnectionError("数据获取错误，错误为：0x01900012, cannot find token param.")
-            except UnicodeDecodeError:
-                with warnings.catch_warnings(record=True) as w:
-                    html_parser = BeautifulSoup(response.content.decode('utf-8'), 'html.parser')
-                    if w and issubclass(
-                            w[-1].category,
-                            UserWarning
-                    ) and "MarkupResemblesLocatorWarning" in str(w[-1].message):
-                        html_parser = BeautifulSoup(response.content.decode('utf-8'), 'lxml')
-                if html_parser.find("h1"):
-                    raise ConnectionError("数据获取错误，错误为：Please enable JavaScript and refresh the page.")
-                if "认证失败，无法访问系统资源" in str(html_parser):
-                    raise ConnectionError("数据获取错误，错误为：401，无法访问系统资源.")
-                if "cannot find token param." in str(html_parser):
-                    raise ConnectionError("数据获取错误，错误为：0x01900012, cannot find token param.")
+                except UnicodeDecodeError:
+                    try:
+                        html_parser = BeautifulSoup(response.content.decode('utf-8'), 'html.parser')
+                        if w and issubclass(
+                                w[-1].category,
+                                UserWarning
+                        ) and "MarkupResemblesLocatorWarning" in str(w[-1].message):
+                            html_parser = BeautifulSoup(response.content.decode('utf-8'), 'lxml')
+                    except UnicodeDecodeError:
+                        response.encoding = response.apparent_encoding
+                        html_parser = BeautifulSoup(response.text, 'html.parser')
+                        if w and issubclass(
+                                w[-1].category,
+                                UserWarning
+                        ) and "MarkupResemblesLocatorWarning" in str(w[-1].message):
+                            response.encoding = response.apparent_encoding
+                            html_parser = BeautifulSoup(response.text, 'lxml')
+
+            if html_parser.find("h1"):
+                raise ConnectionError("数据获取错误，错误为：Please enable JavaScript and refresh the page.")
+            if "认证失败，无法访问系统资源" in str(html_parser):
+                raise ConnectionError("数据获取错误，错误为：401，无法访问系统资源.")
+            if "cannot find token param." in str(html_parser):
+                raise ConnectionError("数据获取错误，错误为：0x01900012, cannot find token param.")
+
             if url.strip("/")[-4:] != "html":
                 page_element = {
                     i.get_text(): {
