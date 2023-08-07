@@ -63,7 +63,7 @@ class ProgressBar:
 def get_proxy(proxy_pool_host: str, year: int):
     global proxy_ip
     if proxy_pool_host:
-        if "http" not in proxy_pool_host or "https" not in proxy_pool_host:
+        if "http" not in proxy_pool_host and "https" not in proxy_pool_host:
             raise Exception("请填写完整的代理池IP，例如：https://127.0.0.1:8080/get/ip/")
         proxy_pool_response = requests.get(proxy_pool_host).json()
         proxy = proxy_pool_response.get("proxy")
@@ -103,18 +103,23 @@ def delete_proxy(delete_proxy_ip_host: str, year: int):
         pass
 
 
-def get_page_element(url: str, year: int, proxy_pool_host: str = None, delete_proxy_ip_host: str = None) -> dict:
+def get_page_element(
+        url: str, year: int,
+        proxy_pool_host: str = None,
+        delete_proxy_ip_host: str = None,
+        retry_num: int = None
+) -> dict:
     """获取省份用于跳转的URL
     :param url: 字符串类型 -> 网页链接 -> 必需
     :param year: 整数类型 -> 年份 -> 必需
     :param proxy_pool_host: 字符串类型 -> 代理池地址
     :param delete_proxy_ip_host: 字符串类型 -> 删除代理池ip地址
+    :param retry_num: 整数类型 -> 重试次数
     :return province_url: 字典类型 -> key值为省份，value值为链接
     """
     global proxy_ip
-    retry_num = 0
 
-    while True:
+    while (retry_num > 0) if retry_num else True:
         try:
             headers = {
                 'Host': 'www.stats.gov.cn',
@@ -168,7 +173,10 @@ def get_page_element(url: str, year: int, proxy_pool_host: str = None, delete_pr
                             'a') else None
                     } for x in html_parser.select('.provincetr') for i in x.findAll('td')
                 }
-                return page_element
+                if isinstance(page_element, dict) and page_element:
+                    return page_element
+                else:
+                    raise ValueError("未获取到数据")
 
             elif url.strip("/")[-4:] == "html":
                 select_element = {
@@ -187,13 +195,16 @@ def get_page_element(url: str, year: int, proxy_pool_host: str = None, delete_pr
                     } for x in html_parser.select(select_element[len(url.split("/")[-1].strip(".html"))])
                 }
 
-                return page_element
-        except Exception as e:
+                if isinstance(page_element, dict) and page_element:
+                    return page_element
+                else:
+                    raise ValueError("未获取到数据")
+
+        except Exception as err:
+            _ = err
             delete_proxy(delete_proxy_ip_host=delete_proxy_ip_host, year=year)
             get_proxy(proxy_pool_host=proxy_pool_host, year=year)
-            retry_num += 1
-            if retry_num == 50000:
-                raise e
+            retry_num -= 1
 
 
 def get_all_code(
@@ -201,7 +212,8 @@ def get_all_code(
         save_path: str = None,
         progress_bar: ProgressBar = None,
         proxy_pool_host: str = None,
-        delete_proxy_ip_host: str = None
+        delete_proxy_ip_host: str = None,
+        retry_num: int = None
 ):
     """获取某一年份所有区划代码
 
@@ -212,6 +224,7 @@ def get_all_code(
     :param progress_bar: 进度条 -> ProgressBar函数
     :param proxy_pool_host: 字符串类型 -> 代理池地址
     :param delete_proxy_ip_host: 字符串类型 -> 删除代理池ip地址
+    :param retry_num: 整数类型 -> 重试次数
     :return:
     """
     output = Path(save_path or ".") / f"geo_code_{year}.json"
@@ -244,99 +257,98 @@ def get_all_code(
         url=f"http://www.stats.gov.cn/sj/tjbz/tjyqhdmhcxhfdm/{year}",
         proxy_pool_host=proxy_pool_host,
         delete_proxy_ip_host=delete_proxy_ip_host,
-        year=year
+        year=year,
+        retry_num=retry_num
     )
-    try:
-        for province, province_v in provinces.items():
-            if result.get("data", None):
-                max_province_code = int(str(max_code)[0:2] + "0000000000")
-                if province_v["code"] and int(province_v["code"]) < max_province_code:
-                    continue
+    for province, province_v in provinces.items():
+        if result.get("data", None):
+            max_province_code = int(str(max_code)[0:2] + "0000000000")
+            if province_v["code"] and int(province_v["code"]) < max_province_code:
+                continue
 
-            if not province_v["next_level_url"]:
-                if not province_v["code"]:
-                    continue
-                result["data"].update({province_v["code"]: province})
+        if not province_v["next_level_url"]:
+            if not province_v["code"]:
                 continue
             result["data"].update({province_v["code"]: province})
-            cities = get_page_element(
-                url=province_v["next_level_url"],
+            continue
+        result["data"].update({province_v["code"]: province})
+        cities = get_page_element(
+            url=province_v["next_level_url"],
+            proxy_pool_host=proxy_pool_host,
+            delete_proxy_ip_host=delete_proxy_ip_host,
+            year=year,
+            retry_num=retry_num
+        )
+        for city, city_v in cities.items():
+            if result.get("data", None):
+                max_province_code = int(str(max_code)[0:4] + "00000000")
+                if int(city_v["code"]) < max_province_code:
+                    continue
+            if not city_v["next_level_url"]:
+                result["data"].update({city_v['code']: city})
+                continue
+            result["data"].update({city_v['code']: city})
+            counties = get_page_element(
+                url=city_v["next_level_url"],
                 proxy_pool_host=proxy_pool_host,
                 delete_proxy_ip_host=delete_proxy_ip_host,
-                year=year
+                year=year,
+                retry_num=retry_num
             )
-            for city, city_v in cities.items():
+            for county, county_v in counties.items():
                 if result.get("data", None):
-                    max_province_code = int(str(max_code)[0:4] + "00000000")
-                    if int(city_v["code"]) < max_province_code:
+                    max_province_code = int(str(max_code)[0:6] + "000000")
+                    if int(county_v["code"]) < max_province_code:
                         continue
-                if not city_v["next_level_url"]:
-                    result["data"].update({city_v['code']: city})
+                if not county_v["next_level_url"]:
+                    result["data"].update({county_v['code']: county})
                     continue
-                result["data"].update({city_v['code']: city})
-                counties = get_page_element(
-                    url=city_v["next_level_url"],
+                result["data"].update({county_v['code']: county})
+                towns = get_page_element(
+                    url=county_v["next_level_url"],
                     proxy_pool_host=proxy_pool_host,
                     delete_proxy_ip_host=delete_proxy_ip_host,
-                    year=year
+                    year=year,
+                    retry_num=retry_num
                 )
-                for county, county_v in counties.items():
+                for town_i, (town, town_v) in (
+                        enumerate(tqdm(towns.items(), desc=f"{province}-{city}-{county}"))
+                        if not progress_bar else enumerate(towns.items())
+                ):
+                    if progress_bar:
+                        progress_bar.update(thread_id=f"{year}-{province}-{city}-{county}",
+                                            progress=town_i, data_length=len(towns))
                     if result.get("data", None):
-                        max_province_code = int(str(max_code)[0:6] + "000000")
-                        if int(county_v["code"]) < max_province_code:
+                        max_province_code = int(str(max_code)[0:9] + "000")
+                        if int(town_v["code"]) < max_province_code:
                             continue
-                    if not county_v["next_level_url"]:
-                        result["data"].update({county_v['code']: county})
+                    if not town_v["next_level_url"]:
+                        result["data"].update({town_v['code']: town})
                         continue
-                    result["data"].update({county_v['code']: county})
-                    towns = get_page_element(
-                        url=county_v["next_level_url"],
+                    result["data"].update({town_v['code']: town})
+                    villages = get_page_element(
+                        url=town_v["next_level_url"],
                         proxy_pool_host=proxy_pool_host,
                         delete_proxy_ip_host=delete_proxy_ip_host,
-                        year=year
+                        year=year,
+                        retry_num=retry_num
                     )
-                    for town_i, (town, town_v) in (
-                            enumerate(tqdm(towns.items(), desc=f"{province}-{city}-{county}"))
-                            if not progress_bar else enumerate(towns.items())
-                    ):
-                        if progress_bar:
-                            progress_bar.update(thread_id=f"{year}-{province}-{city}-{county}",
-                                                progress=town_i, data_length=len(towns))
-                        if result.get("data", None):
-                            max_province_code = int(str(max_code)[0:9] + "000")
-                            if int(town_v["code"]) < max_province_code:
-                                continue
-                        if not town_v["next_level_url"]:
-                            result["data"].update({town_v['code']: town})
+                    for village, village_v in villages.items():
+                        if result.get("data", None) and int(village_v["code"]) < max_code:
                             continue
-                        result["data"].update({town_v['code']: town})
-                        villages = get_page_element(
-                            url=town_v["next_level_url"],
-                            proxy_pool_host=proxy_pool_host,
-                            delete_proxy_ip_host=delete_proxy_ip_host,
-                            year=year
-                        )
-                        for village, village_v in villages.items():
-                            if result.get("data", None) and int(village_v["code"]) < max_code:
-                                continue
-                            result["data"].update({village_v['code']: village})
+                        result["data"].update({village_v['code']: village})
 
-        with output.open(mode='w', encoding="utf-8") as f:
-            json.dump(result, f, ensure_ascii=False)
-
-        print(f"{year}年区划代码获取完成！")
-    except Exception as err:
-        raise Exception(f"程序异常，错误信息为:{str(err)}")
-    finally:
-        with output.open(mode='w', encoding="utf-8") as f:
-            json.dump(result, f, ensure_ascii=False)
+            with output.open(mode='w', encoding="utf-8") as f:
+                json.dump(result, f, ensure_ascii=False)
+    print(f"{year}年区划代码获取完成！")
 
 
 def multithreading_get_all_code(
         years: list,
         save_path: str = None,
         proxy_pool_host: str = None,
-        delete_proxy_ip_host: str = None
+        delete_proxy_ip_host: str = None,
+        retry_num: int = None
 ):
     """多线程获取所有区划代码
     注意：该方法依赖代理池，因此需要自备代理池
@@ -355,13 +367,22 @@ def multithreading_get_all_code(
     :param save_path: 字符串类型 -> 保存路径 -> 非必需
     :param proxy_pool_host: 字符串类型 -> 代理池地址 -> 非必需
     :param delete_proxy_ip_host: 字符串类型 -> 删除代理池ip地址 -> 非必需
+    :param retry_num: 整数类型 -> 重试次数
     :return:
     """
     progress_bar = ProgressBar()
 
     with concurrent.futures.ThreadPoolExecutor() as executor:
         futures = [
-            executor.submit(get_all_code, years[i], save_path, progress_bar, proxy_pool_host, delete_proxy_ip_host) for
+            executor.submit(
+                get_all_code,
+                years[i],
+                save_path,
+                progress_bar,
+                proxy_pool_host,
+                delete_proxy_ip_host,
+                retry_num
+            ) for
             i in range(len(years))
         ]
 
