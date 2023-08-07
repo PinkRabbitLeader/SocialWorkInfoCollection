@@ -204,7 +204,8 @@ def get_page_element(
             _ = err
             delete_proxy(delete_proxy_ip_host=delete_proxy_ip_host, year=year)
             get_proxy(proxy_pool_host=proxy_pool_host, year=year)
-            retry_num -= 1
+            if retry_num:
+                retry_num -= 1
 
 
 def get_all_code(
