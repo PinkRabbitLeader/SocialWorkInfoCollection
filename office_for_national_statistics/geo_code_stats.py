@@ -363,7 +363,7 @@ def get_all_code(
                     retry_num=retry_num
                 )
                 for town_i, (town, town_v) in (
-                        enumerate(towns.items()) if not progress_bar else
+                        enumerate(towns.items()) if progress_bar else
                         enumerate(tqdm(towns.items(), desc=f"{province}-{city}-{county}"))
                 ):
                     if progress_bar:
