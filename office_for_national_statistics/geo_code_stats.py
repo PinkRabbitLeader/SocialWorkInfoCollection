@@ -217,12 +217,17 @@ def get_page_element(
                     raise ValueError("未获取到数据")
 
             elif url.strip("/")[-4:] == "html":
-                select_element = {
-                    2: ".citytr",
-                    4: ".countytr",
-                    6: ".towntr",
-                    9: ".villagetr"
-                }
+                select_element = [".citytr", ".countytr", ".towntr", ".villagetr"]
+                table = None
+                for i in select_element:
+                    if html_parser.select(i):
+                        table = html_parser.select(i)
+                        break
+                    else:
+                        continue
+
+                if not table:
+                    return {}
                 next_level_url = url.replace(url.split("/")[-1], "{href}")
                 page_element = {
                     (x.findAll('td')[1].get_text() if len(x.findAll('td')) == 2 else x.findAll('td')[2].get_text()): {
@@ -230,7 +235,7 @@ def get_page_element(
                         "next_level_url": next_level_url.format(
                             href=x.findAll('td')[1].find('a').attrs['href']
                         ) if x.findAll('td')[1].find('a') else None
-                    } for x in html_parser.select(select_element[len(url.split("/")[-1].strip(".html"))])
+                    } for x in table
                 }
 
                 if isinstance(page_element, dict) and page_element:
@@ -363,12 +368,6 @@ def get_all_code(
                         enumerate(towns.items()) if progress_bar else
                         enumerate(tqdm(towns.items(), desc=f"{province}-{city}-{county}"))
                 ):
-                    if progress_bar:
-                        progress_bar.update(
-                            thread_id=f"{year}-{province}-{city}-{county}",
-                            progress=town_i,
-                            data_length=len(towns)
-                        )
                     if result.get("data", None):
                         max_province_code = int(str(max_code)[0:9].ljust(CODE_DIGITS, '0'))
                         if int(town_v["code"]) < max_province_code:
@@ -376,6 +375,12 @@ def get_all_code(
                     if not town_v["next_level_url"]:
                         result["data"].update({town_v['code']: town})
                         continue
+                    if progress_bar:
+                        progress_bar.update(
+                            thread_id=f"{year}-{province}-{city}-{county}",
+                            progress=town_i,
+                            data_length=len(towns)
+                        )
                     result["data"].update({town_v['code']: town})
                     villages = get_page_element(
                         url=town_v["next_level_url"],
