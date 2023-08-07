@@ -16,7 +16,22 @@ from tqdm import tqdm
 
 from utils.web_scraping_tools import user_agent_list
 
+CODE_DIGITS = 12
 proxy_ip = {}
+
+
+def ensure_endswith(string: str, ends: str) -> str:
+    """
+    确保一个字符串以某个字符串结尾。
+    """
+    return string if string.endswith(ends) else (string + ends)
+
+
+def ensure_endswithout(string: str, ends: str) -> str:
+    """
+    确保一个字符串不以某个字符串结尾。
+    """
+    return string[:-len(ends)] if string.endswith(ends) else string
 
 
 class ProgressBar:
@@ -194,13 +209,16 @@ def get_page_element(
             if "cannot find token param." in str(html_parser):
                 raise ConnectionError("数据获取错误，错误为：0x01900012, cannot find token param.")
 
-            if url.strip("/")[-4:] != "html":
+            if not url.rstrip("/").endswith('html'):
                 page_element = {
                     i.get_text(): {
-                        "code": i.find('a').attrs['href'].strip(".html") + "0000000000" if i.find('a') else None,
-                        "next_level_url": (url + "/" if url[-1] != "/" else url) + i.find('a').attrs['href'] if i.find(
-                            'a') else None
-                    } for x in html_parser.select('.provincetr') for i in x.findAll('td')
+                        "code": a.attrs['href'].strip(".html").ljust(CODE_DIGITS, 12),
+                        "next_level_url": ensure_endswith(url, '/') + a.attrs['href'],
+                    } if (a := i.find('a')) else {
+                        "code": None,
+                        "next_level_url": None,
+                    }
+                    for x in html_parser.select('.provincetr') for i in x.findAll('td')
                 }
                 if isinstance(page_element, dict) and page_element:
                     return page_element
@@ -311,7 +329,7 @@ def get_all_code(
     )
     for province, province_v in provinces.items():
         if result.get("data", None):
-            max_province_code = int(str(max_code)[0:2] + "0000000000")
+            max_province_code = int(str(max_code)[0:2].ljust(CODE_DIGITS, '0'))
             if province_v["code"] and int(province_v["code"]) < max_province_code:
                 continue
 
@@ -330,7 +348,7 @@ def get_all_code(
         )
         for city, city_v in cities.items():
             if result.get("data", None):
-                max_province_code = int(str(max_code)[0:4] + "00000000")
+                max_province_code = int(str(max_code)[0:4].ljust(CODE_DIGITS, '0'))
                 if int(city_v["code"]) < max_province_code:
                     continue
             if not city_v["next_level_url"]:
@@ -346,7 +364,7 @@ def get_all_code(
             )
             for county, county_v in counties.items():
                 if result.get("data", None):
-                    max_province_code = int(str(max_code)[0:6] + "000000")
+                    max_province_code = int(str(max_code)[0:6].ljust(CODE_DIGITS, '0'))
                     if int(county_v["code"]) < max_province_code:
                         continue
                 if not county_v["next_level_url"]:
@@ -361,14 +379,17 @@ def get_all_code(
                     retry_num=retry_num
                 )
                 for town_i, (town, town_v) in (
+                        enumerate(towns.items()) if not progress_bar else
                         enumerate(tqdm(towns.items(), desc=f"{province}-{city}-{county}"))
-                        if not progress_bar else enumerate(towns.items())
                 ):
                     if progress_bar:
-                        progress_bar.update(thread_id=f"{year}-{province}-{city}-{county}",
-                                            progress=town_i, data_length=len(towns))
+                        progress_bar.update(
+                            thread_id=f"{year}-{province}-{city}-{county}",
+                            progress=town_i,
+                            data_length=len(towns)
+                        )
                     if result.get("data", None):
-                        max_province_code = int(str(max_code)[0:9] + "000")
+                        max_province_code = int(str(max_code)[0:9].ljust(CODE_DIGITS, '0'))
                         if int(town_v["code"]) < max_province_code:
                             continue
                     if not town_v["next_level_url"]:
