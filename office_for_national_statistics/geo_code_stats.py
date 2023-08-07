@@ -101,15 +101,9 @@ def get_proxy(proxy_pool_host: str, year: int):
                 "https": "https://{}".format(proxy)
             }
 
-        if proxy_ip.get(year, None):
-            proxy_ip[year] = {"proxy": proxy, "proxies": proxies}
-        else:
-            proxy_ip.update({year: {"proxy": proxy_pool_response.get("proxy"), "proxies": proxies}})
+        _ = proxy_ip.setdefault(year, {"proxy": proxy, "proxies": proxies})
     else:
-        if proxy_ip.get(year, None):
-            proxy_ip[year] = {"proxy": None, "proxies": None}
-        else:
-            proxy_ip.update({year: {"proxy": None, "proxies": None}})
+        _ = proxy_ip.setdefault(year, {"proxy": None, "proxies": None})
 
 
 def delete_proxy(delete_proxy_ip_host: str, year: int):
