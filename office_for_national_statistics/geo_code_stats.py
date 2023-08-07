@@ -88,7 +88,7 @@ def get_proxy(proxy_pool_host: str, year: int):
     global proxy_ip
     if proxy_pool_host:
         if "http" not in proxy_pool_host and "https" not in proxy_pool_host:
-            raise Exception("请填写完整的代理池IP，例如：https://127.0.0.1:8080/get/ip/")
+            raise ValueError("请填写完整的代理池IP，例如：https://127.0.0.1:8080/get/ip/")
         proxy_pool_response = requests.get(proxy_pool_host).json()
         proxy = proxy_pool_response.get("proxy")
 
