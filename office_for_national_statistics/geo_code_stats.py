@@ -61,6 +61,13 @@ class ProgressBar:
 
 
 def get_proxy(proxy_pool_host: str, year: int):
+    """获取代理地址
+
+    :param proxy_pool_host: 字符串类型 -> 代理池地址
+    :param proxy_pool_host:
+    :param year: 整数类型 -> 年份
+    :return: None
+    """
     global proxy_ip
     if proxy_pool_host:
         if "http" not in proxy_pool_host and "https" not in proxy_pool_host:
@@ -94,13 +101,26 @@ def delete_proxy(delete_proxy_ip_host: str, year: int):
 
     :param delete_proxy_ip_host: 字符串类型 -> 删除代理ip接口的地址
     :param year: 整数类型 -> 年份
-    :return:
+    :return: None
     """
     global proxy_ip
     if delete_proxy_ip_host and proxy_ip[year]["proxy"]:
         requests.get(delete_proxy_ip_host, params={"proxy": proxy_ip[year]["proxy"]})
     else:
         pass
+
+
+def update_proxy(year: int, proxy_pool_host: str, delete_proxy_ip_host: str):
+    """更新代理地址
+
+    :param year: 整数类型 -> 年份
+    :param proxy_pool_host: 字符串类型 -> 代理池地址
+    :param delete_proxy_ip_host: 字符串类型 -> 删除代理ip接口的地址
+
+    :return: None
+    """
+    delete_proxy(delete_proxy_ip_host=delete_proxy_ip_host, year=year)
+    get_proxy(proxy_pool_host=proxy_pool_host, year=year)
 
 
 def get_page_element(
@@ -208,23 +228,19 @@ def get_page_element(
                     raise ValueError("未获取到数据")
 
         except ConnectionError:
-            delete_proxy(delete_proxy_ip_host=delete_proxy_ip_host, year=year)
-            get_proxy(proxy_pool_host=proxy_pool_host, year=year)
+            update_proxy(proxy_pool_host=proxy_pool_host, delete_proxy_ip_host=delete_proxy_ip_host, year=year)
             if retry_num:
                 retry_num -= 1
         except ValueError:
-            delete_proxy(delete_proxy_ip_host=delete_proxy_ip_host, year=year)
-            get_proxy(proxy_pool_host=proxy_pool_host, year=year)
+            update_proxy(proxy_pool_host=proxy_pool_host, delete_proxy_ip_host=delete_proxy_ip_host, year=year)
             if retry_num:
                 retry_num -= 1
         except requests.exceptions.ReadTimeout:
-            delete_proxy(delete_proxy_ip_host=delete_proxy_ip_host, year=year)
-            get_proxy(proxy_pool_host=proxy_pool_host, year=year)
+            update_proxy(proxy_pool_host=proxy_pool_host, delete_proxy_ip_host=delete_proxy_ip_host, year=year)
             if retry_num:
                 retry_num -= 1
         except requests.exceptions.ConnectionError:
-            delete_proxy(delete_proxy_ip_host=delete_proxy_ip_host, year=year)
-            get_proxy(proxy_pool_host=proxy_pool_host, year=year)
+            update_proxy(proxy_pool_host=proxy_pool_host, delete_proxy_ip_host=delete_proxy_ip_host, year=year)
             if retry_num:
                 retry_num -= 1
         except Exception as err:
