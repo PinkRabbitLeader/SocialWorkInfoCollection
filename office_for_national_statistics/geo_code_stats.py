@@ -247,23 +247,13 @@ def get_page_element(
                 else:
                     raise ValueError("未获取到数据")
 
-        except ConnectionError:
-            update_proxy(proxy_pool_host=proxy_pool_host, delete_proxy_ip_host=delete_proxy_ip_host, year=year)
-            if retry_num:
-                retry_num -= 1
-        except ValueError:
-            update_proxy(proxy_pool_host=proxy_pool_host, delete_proxy_ip_host=delete_proxy_ip_host, year=year)
-            if retry_num:
-                retry_num -= 1
-        except requests.exceptions.ReadTimeout:
-            update_proxy(proxy_pool_host=proxy_pool_host, delete_proxy_ip_host=delete_proxy_ip_host, year=year)
-            if retry_num:
-                retry_num -= 1
-        except requests.exceptions.ConnectionError:
-            update_proxy(proxy_pool_host=proxy_pool_host, delete_proxy_ip_host=delete_proxy_ip_host, year=year)
-            if retry_num:
-                retry_num -= 1
-        except requests.exceptions.ChunkedEncodingError:
+        except (
+                ValueError,
+                ConnectionError,
+                requests.exceptions.ReadTimeout,
+                requests.exceptions.ConnectionError,
+                requests.exceptions.ChunkedEncodingError,
+        ):
             update_proxy(proxy_pool_host=proxy_pool_host, delete_proxy_ip_host=delete_proxy_ip_host, year=year)
             if retry_num:
                 retry_num -= 1
