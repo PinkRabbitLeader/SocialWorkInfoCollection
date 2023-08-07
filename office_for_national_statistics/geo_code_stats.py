@@ -126,6 +126,9 @@ def get_page_element(
                 'User-Agent': random.choice(user_agent_list)
             }
 
+            session = requests.session()
+            session.keep_alive = False
+
             response = requests.get(
                 url=url,
                 headers=headers,
@@ -204,12 +207,31 @@ def get_page_element(
                 else:
                     raise ValueError("未获取到数据")
 
-        except Exception as err:
-            _ = err
+        except ConnectionError:
             delete_proxy(delete_proxy_ip_host=delete_proxy_ip_host, year=year)
             get_proxy(proxy_pool_host=proxy_pool_host, year=year)
             if retry_num:
                 retry_num -= 1
+        except ValueError:
+            delete_proxy(delete_proxy_ip_host=delete_proxy_ip_host, year=year)
+            get_proxy(proxy_pool_host=proxy_pool_host, year=year)
+            if retry_num:
+                retry_num -= 1
+        except requests.exceptions.ReadTimeout:
+            delete_proxy(delete_proxy_ip_host=delete_proxy_ip_host, year=year)
+            get_proxy(proxy_pool_host=proxy_pool_host, year=year)
+            if retry_num:
+                retry_num -= 1
+        except requests.exceptions.ConnectionError:
+            delete_proxy(delete_proxy_ip_host=delete_proxy_ip_host, year=year)
+            get_proxy(proxy_pool_host=proxy_pool_host, year=year)
+            if retry_num:
+                retry_num -= 1
+        except Exception as err:
+            print("=" * 100)
+            print(f"\n由于发生未知错误，{year}年的爬虫提前退出：错误为：{err.args}\n")
+            print("=" * 100)
+            raise err
 
 
 def get_all_code(
