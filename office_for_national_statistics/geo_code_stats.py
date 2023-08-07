@@ -409,7 +409,7 @@ def get_all_code(
                         result["data"].update({village_v['code']: village})
 
             with output.open(mode='w', encoding="utf-8") as f:
-                json.dump(result, f, ensure_ascii=False)
+                json.dump(result, f, ensure_ascii=False, separators=(',', ':'))
     print(f"{year}年区划代码获取完成！")
 
 
