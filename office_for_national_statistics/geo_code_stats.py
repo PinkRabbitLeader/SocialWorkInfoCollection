@@ -87,20 +87,17 @@ def get_proxy(proxy_pool_host: str, year: int):
     """
     global proxy_ip
     if proxy_pool_host:
-        if "http" not in proxy_pool_host and "https" not in proxy_pool_host:
-            raise ValueError("请填写完整的代理池IP，例如：https://127.0.0.1:8080/get/ip/")
+        if not proxy_pool_host.startswith('http') and not proxy_pool_host.startswith('https'):
+            raise ValueError(
+                "请填写完整的代理池IP，例如：https://127.0.0.1:8080/get/ip/"
+            )
         proxy_pool_response = requests.get(proxy_pool_host).json()
         proxy = proxy_pool_response.get("proxy")
-
-        if not proxy_pool_response.get("https"):
-            proxies = {
-                "http": "http://{}".format(proxy)
-            }
-        else:
-            proxies = {
-                "https": "https://{}".format(proxy)
-            }
-
+        proxies = {
+            "https": f"https://{proxy!s}"
+        } if proxy_pool_response.get("https") else {
+            "http": f"http://{proxy}"
+        }
         _ = proxy_ip.setdefault(year, {"proxy": proxy, "proxies": proxies})
     else:
         _ = proxy_ip.setdefault(year, {"proxy": None, "proxies": None})
