@@ -157,7 +157,8 @@ def get_page_element(
         try:
             headers = {
                 'Host': 'www.stats.gov.cn',
-                'User-Agent': random.choice(user_agent_list)
+                'User-Agent': random.choice(user_agent_list),
+                'Accept-Encoding': 'identity'
             }
 
             session = requests.session()
@@ -205,7 +206,8 @@ def get_page_element(
                 raise ConnectionError("数据获取错误，错误为：401，无法访问系统资源.")
             if "cannot find token param." in str(html_parser):
                 raise ConnectionError("数据获取错误，错误为：0x01900012, cannot find token param.")
-
+            if "请输入验证码，以继续浏览" in str(html_parser):
+                raise ConnectionError("数据获取错误，错误为：需要输入验证码")
             if not url.rstrip("/").endswith('html'):
                 page_element = {
                     i.get_text(): {
@@ -261,9 +263,10 @@ def get_page_element(
             if retry_num:
                 retry_num -= 1
         except Exception as err:
-            print("=" * 100)
-            print(f"\n由于发生未知错误，{year}年的爬虫提前退出：错误为：{err.args}\n")
-            print("=" * 100)
+            print("\n", "=" * 100)
+            print(f"错误链接：{url}")
+            print(f"由于发生未知错误，{year}年的爬虫提前退出：错误为：{err.args}")
+            print("=" * 100, "\n")
             raise err
 
 
@@ -403,7 +406,9 @@ def get_all_code(
 
             with output.open(mode='w', encoding="utf-8") as f:
                 json.dump(result, f, ensure_ascii=False, separators=(',', ':'))
+    print("\n", "=" * 100)
     print(f"{year}年区划代码获取完成！")
+    print("=" * 100, "\n")
 
 
 def multithreading_get_all_code(
