@@ -113,7 +113,13 @@ def delete_proxy(delete_proxy_ip_host: str, year: int):
     """
     global proxy_ip
     if delete_proxy_ip_host and proxy_ip[year]["proxy"]:
-        requests.get(delete_proxy_ip_host, params={"proxy": proxy_ip[year]["proxy"]})
+        try:
+            session = requests.session()
+            session.keep_alive = False
+            requests.get(delete_proxy_ip_host, params={"proxy": proxy_ip[year]["proxy"]})
+        except Exception as err:
+            _ = err
+            pass
     else:
         pass
 
@@ -246,6 +252,7 @@ def get_page_element(
         except (
                 ValueError,
                 ConnectionError,
+                requests.exceptions.ProxyError,
                 requests.exceptions.ReadTimeout,
                 requests.exceptions.ConnectionError,
                 requests.exceptions.ChunkedEncodingError,
